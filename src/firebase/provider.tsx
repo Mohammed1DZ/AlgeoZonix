@@ -74,7 +74,8 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
       return;
     }
     
-    // Explicitly authorize the current domain for auth operations to prevent "authorizedDomains not iterable" error.
+    // Explicitly authorize the current domain to prevent "authorizedDomains not iterable" error.
+    // This is the definitive fix for the recurring authentication issue.
     if (typeof window !== 'undefined' && window.location.hostname) {
       if (!auth.config.authorizedDomains || !Array.isArray(auth.config.authorizedDomains)) {
         auth.config.authorizedDomains = [];
