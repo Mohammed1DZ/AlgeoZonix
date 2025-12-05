@@ -7,8 +7,7 @@
  */
 
 import { initializeFirebase } from '@/firebase/server';
-import { getAuth } from 'firebase-admin/auth';
-import { getFirestore, doc, writeBatch, collection, query, where, getDocs } from 'firebase-admin/firestore';
+import { getFirestore } from 'firebase-admin/firestore';
 
 export interface DeleteUserInput {
   userIdToDelete: string;
@@ -30,7 +29,9 @@ export async function deleteUser(input: DeleteUserInput): Promise<{ success: boo
     const { firestore, auth } = await initializeFirebase();
 
     // Verify the requesting user is an admin
-    const adminDoc = await getFirestore().collection('users').doc(adminUserId).get();
+    const adminDocRef = firestore.collection('users').doc(adminUserId);
+    const adminDoc = await adminDocRef.get();
+    
     if (!adminDoc.exists || adminDoc.data()?.role !== 'admin') {
         return { success: false, message: 'Unauthorized: Only administrators can delete users.' };
     }
@@ -39,14 +40,14 @@ export async function deleteUser(input: DeleteUserInput): Promise<{ success: boo
     await auth.deleteUser(userIdToDelete);
 
     // Delete from Firestore
-    const userDocRef = doc(firestore, 'users', userIdToDelete);
-    const batch = writeBatch(firestore);
+    const userDocRef = firestore.collection('users').doc(userIdToDelete);
+    const batch = firestore.batch();
     batch.delete(userDocRef);
 
     // Optional: Clean up related data in other collections
     // For example, delete notifications for that user
-    const notificationsRef = collection(firestore, 'users', userIdToDelete, 'notifications');
-    const notificationsSnapshot = await getDocs(notificationsRef);
+    const notificationsRef = userDocRef.collection('notifications');
+    const notificationsSnapshot = await notificationsRef.get();
     notificationsSnapshot.forEach(doc => batch.delete(doc.ref));
 
     await batch.commit();
@@ -59,8 +60,8 @@ export async function deleteUser(input: DeleteUserInput): Promise<{ success: boo
     // Handle case where user might already be deleted from auth but not firestore
     if (error.code === 'auth/user-not-found') {
         try {
-            const userDocRef = doc(getFirestore(), 'users', userIdToDelete);
-            await deleteDoc(userDocRef);
+            const userDocRef = getFirestore().collection('users').doc(userIdToDelete);
+            await userDocRef.delete();
             return { success: true, message: 'User was already deleted from authentication, removed from database.' };
         } catch (dbError) {
              return { success: false, message: 'User not found in authentication. Failed to clean up database.' };
