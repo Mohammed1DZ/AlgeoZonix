@@ -1,56 +1,75 @@
-'use client';
+'use server';
 /**
  * @fileOverview A flow for securely deleting a user from the system.
  *
- * - deleteUser - Calls the server action to delete a user from Firebase Authentication and Firestore.
+ * - deleteUser - Deletes a user from Firebase Authentication and Firestore using the Admin SDK.
  * - DeleteUserInput - The input type for the deleteUser function.
  */
 
-import { getAuth } from 'firebase/auth';
+import { initializeFirebase } from '@/firebase/server';
+import { getAuth } from 'firebase-admin/auth';
+import { getFirestore, doc, writeBatch, collection, query, where, getDocs } from 'firebase-admin/firestore';
 
 export interface DeleteUserInput {
-  userId: string;
+  userIdToDelete: string;
+  adminUserId: string; // The UID of the user performing the deletion.
 }
 
 export async function deleteUser(input: DeleteUserInput): Promise<{ success: boolean; message: string }> {
-  const { userId } = input;
+  const { userIdToDelete, adminUserId } = input;
   
-  if (!userId) {
-    throw new Error('User ID is required.');
+  if (!userIdToDelete || !adminUserId) {
+    throw new Error('Both User ID to delete and Admin User ID are required.');
+  }
+
+  if (userIdToDelete === adminUserId) {
+    return { success: false, message: 'Administrators cannot delete their own account.' };
   }
 
   try {
-    // Get the current user's authentication token
-    const auth = getAuth();
-    const currentUser = auth.currentUser;
+    const { firestore, auth } = await initializeFirebase();
 
-    if (!currentUser) {
-      throw new Error('Not authenticated. Please log in.');
+    // Verify the requesting user is an admin
+    const adminDoc = await getFirestore().collection('users').doc(adminUserId).get();
+    if (!adminDoc.exists || adminDoc.data()?.role !== 'admin') {
+        return { success: false, message: 'Unauthorized: Only administrators can delete users.' };
     }
 
-    const authToken = await currentUser.getIdToken();
+    // Delete from Firebase Authentication
+    await auth.deleteUser(userIdToDelete);
 
-    const response = await fetch('/api/admin/delete-user', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ userId, authToken }),
-    });
+    // Delete from Firestore
+    const userDocRef = doc(firestore, 'users', userIdToDelete);
+    const batch = writeBatch(firestore);
+    batch.delete(userDocRef);
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || `Failed to delete user: ${response.statusText}`);
-    }
+    // Optional: Clean up related data in other collections
+    // For example, delete notifications for that user
+    const notificationsRef = collection(firestore, 'users', userIdToDelete, 'notifications');
+    const notificationsSnapshot = await getDocs(notificationsRef);
+    notificationsSnapshot.forEach(doc => batch.delete(doc.ref));
 
-    const data = await response.json();
-    return data;
+    await batch.commit();
+
+    return { success: true, message: `User ${userIdToDelete} has been permanently deleted.` };
+
   } catch (error: any) {
-    console.error(`Failed to delete user ${userId}:`, error);
+    console.error(`Failed to delete user ${userIdToDelete}:`, error);
+
+    // Handle case where user might already be deleted from auth but not firestore
+    if (error.code === 'auth/user-not-found') {
+        try {
+            const userDocRef = doc(getFirestore(), 'users', userIdToDelete);
+            await deleteDoc(userDocRef);
+            return { success: true, message: 'User was already deleted from authentication, removed from database.' };
+        } catch (dbError) {
+             return { success: false, message: 'User not found in authentication. Failed to clean up database.' };
+        }
+    }
+
     return {
       success: false,
       message: error.message || 'An unknown error occurred during user deletion.',
     };
   }
 }
-

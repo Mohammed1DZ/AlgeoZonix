@@ -40,7 +40,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button";
-import { useCollection, useFirestore, useMemoFirebase } from "@/firebase";
+import { useCollection, useFirestore, useMemoFirebase, useUser } from "@/firebase";
 import { collection, query, orderBy, doc, updateDoc } from "firebase/firestore";
 import { Loader2, MoreHorizontal } from "lucide-react";
 import type { WithId } from "@/firebase/firestore/use-collection";
@@ -56,10 +56,11 @@ type UserProfile = {
         lastName: string;
     };
     role: 'admin' | 'client' | 'driver' | 'customer';
-    status: 'unverified' | 'pending' | 'verified' | 'suspended';
+    status: 'unverified' | 'pending' | 'verified';
 };
 
 export default function AdminUsersPage() {
+    const { user: adminUser } = useUser();
     const firestore = useFirestore();
     const { toast } = useToast();
     const usersQuery = useMemoFirebase(
@@ -80,7 +81,6 @@ export default function AdminUsersPage() {
             case 'pending':
                 return 'secondary';
             case 'unverified':
-            case 'suspended':
                 return 'destructive';
             default:
                 return 'outline';
@@ -95,7 +95,7 @@ export default function AdminUsersPage() {
             await updateDoc(userRef, { status: newStatus });
             toast({
                 title: "Status Updated",
-                description: `User status has been changed to ${newStatus.replace('_', ' ')}.`,
+                description: `User status has been changed to ${newStatus}.`,
             });
         } catch (error) {
             console.error("Failed to update status:", error);
@@ -110,11 +110,14 @@ export default function AdminUsersPage() {
     };
 
     const handleDeleteUser = async () => {
-        if (!selectedUser) return;
+        if (!selectedUser || !adminUser) return;
         setIsSubmitting(true);
 
         try {
-            const result = await deleteUser({ userId: selectedUser.id });
+            const result = await deleteUser({
+                userIdToDelete: selectedUser.id,
+                adminUserId: adminUser.uid,
+            });
 
             if (result.success) {
                  toast({
@@ -186,7 +189,7 @@ export default function AdminUsersPage() {
                                     </TableCell>
                                     <TableCell>
                                          <Badge variant={getStatusVariant(user.status)} className="capitalize">
-                                            {user.status?.replace('_', ' ') || 'Unknown'}
+                                            {user.status || 'Unknown'}
                                         </Badge>
                                     </TableCell>
                                     <TableCell>
@@ -208,7 +211,6 @@ export default function AdminUsersPage() {
                                                     <DropdownMenuSubContent>
                                                         <DropdownMenuItem onClick={() => handleUpdateStatus(user.id, 'verified')}>Verified</DropdownMenuItem>
                                                         <DropdownMenuItem onClick={() => handleUpdateStatus(user.id, 'pending')}>Pending</DropdownMenuItem>
-                                                        <DropdownMenuItem onClick={() => handleUpdateStatus(user.id, 'suspended')}>Suspended</DropdownMenuItem>
                                                         <DropdownMenuItem onClick={() => handleUpdateStatus(user.id, 'unverified')}>Unverified</DropdownMenuItem>
                                                     </DropdownMenuSubContent>
                                                 </DropdownMenuSub>
@@ -219,6 +221,7 @@ export default function AdminUsersPage() {
                                                         setSelectedUser(user);
                                                         setDialogOpen(true);
                                                     }}
+                                                    disabled={user.id === adminUser?.uid}
                                                 >
                                                     Delete User
                                                 </DropdownMenuItem>
@@ -244,7 +247,7 @@ export default function AdminUsersPage() {
                     <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                     <AlertDialogDescription>
                         This action cannot be undone. This will permanently delete the user account
-                        for <span className="font-bold">{selectedUser?.email}</span> and remove their data from our servers.
+                        for <span className="font-bold">{selectedUser?.email}</span> and remove all of their data from our servers.
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
