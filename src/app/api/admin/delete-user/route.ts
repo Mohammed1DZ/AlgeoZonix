@@ -2,16 +2,20 @@
 
 import { initializeFirebase } from '@/firebase/server';
 import { getAuth } from 'firebase-admin/auth';
-import { collection, query, where, getDocs, deleteDoc, doc, writeBatch, Firestore } from 'firebase-admin/firestore';
+import { collection, query, where, getDocs, deleteDoc, doc, writeBatch, Firestore, getDoc } from 'firebase-admin/firestore';
 
 /**
  * API Route to delete a user from Firebase Authentication and Firestore
  * POST /api/admin/delete-user
- * Body: { userId: string }
+ * Body: { userId: string, authToken: string }
+ * 
+ * Requires:
+ * - Admin user authentication token
+ * - Admin role in Firestore user document
  */
 export async function POST(request: Request) {
   try {
-    const { userId } = await request.json();
+    const { userId, authToken } = await request.json();
 
     if (!userId) {
       return new Response(
@@ -20,12 +24,64 @@ export async function POST(request: Request) {
       );
     }
 
+    if (!authToken) {
+      return new Response(
+        JSON.stringify({ success: false, message: 'Authentication token is required.' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
     console.log(`Attempting to delete user: ${userId}`);
 
     const { firebaseApp, firestore } = await initializeFirebase();
     const auth = getAuth(firebaseApp);
 
-    // 1. Delete user from Firebase Authentication
+    // 1. Verify the requester is authenticated and is an admin
+    let adminUid: string;
+    try {
+      const decodedToken = await auth.verifyIdToken(authToken);
+      adminUid = decodedToken.uid;
+      console.log(`Token verified for user: ${adminUid}`);
+    } catch (tokenError: any) {
+      console.warn(`Token verification failed: ${tokenError.message}`);
+      return new Response(
+        JSON.stringify({ success: false, message: 'Invalid or expired authentication token.' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // 2. Check if the requester is an admin
+    const adminDocRef = doc(firestore, 'users', adminUid);
+    const adminDocSnap = await getDoc(adminDocRef);
+    
+    if (!adminDocSnap.exists()) {
+      console.warn(`Admin user document not found: ${adminUid}`);
+      return new Response(
+        JSON.stringify({ success: false, message: 'Admin user not found.' }),
+        { status: 403, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const adminData = adminDocSnap.data() as any;
+    if (adminData.role !== 'admin') {
+      console.warn(`User ${adminUid} attempted to delete user but is not an admin. Role: ${adminData.role}`);
+      return new Response(
+        JSON.stringify({ success: false, message: 'Unauthorized. Only administrators can delete users.' }),
+        { status: 403, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // 3. Prevent admin from deleting themselves
+    if (adminUid === userId) {
+      return new Response(
+        JSON.stringify({ success: false, message: 'Cannot delete your own admin account.' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log(`Admin ${adminUid} authorized to delete user ${userId}`);
+
+    // 4. Delete user from Firebase Authentication
     try {
       await auth.deleteUser(userId);
       console.log(`Successfully deleted user ${userId} from Firebase Auth.`);
@@ -34,12 +90,12 @@ export async function POST(request: Request) {
       console.warn(`Warning deleting from auth: ${authError.message}`);
     }
 
-    // 2. Delete user document from Firestore
+    // 5. Delete user document from Firestore
     const userDocRef = doc(firestore, 'users', userId);
     await deleteDoc(userDocRef);
     console.log(`Successfully deleted user document for ${userId} from Firestore.`);
 
-    // 3. Clean up related data (orders, verifications, etc.)
+    // 6. Clean up related data (orders, verifications, etc.)
     await deleteUserRelatedData(firestore, userId);
 
     return new Response(

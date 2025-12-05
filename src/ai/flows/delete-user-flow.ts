@@ -6,6 +6,8 @@
  * - DeleteUserInput - The input type for the deleteUser function.
  */
 
+import { getAuth } from 'firebase/auth';
+
 export interface DeleteUserInput {
   userId: string;
 }
@@ -18,12 +20,22 @@ export async function deleteUser(input: DeleteUserInput): Promise<{ success: boo
   }
 
   try {
+    // Get the current user's authentication token
+    const auth = getAuth();
+    const currentUser = auth.currentUser;
+
+    if (!currentUser) {
+      throw new Error('Not authenticated. Please log in.');
+    }
+
+    const authToken = await currentUser.getIdToken();
+
     const response = await fetch('/api/admin/delete-user', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ userId }),
+      body: JSON.stringify({ userId, authToken }),
     });
 
     if (!response.ok) {
