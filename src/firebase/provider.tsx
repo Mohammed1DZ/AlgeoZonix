@@ -76,7 +76,7 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
     
     // Explicitly authorize the current domain for auth operations to prevent "authorizedDomains not iterable" error.
     if (typeof window !== 'undefined' && window.location.hostname) {
-      if (!auth.config.authorizedDomains) {
+      if (!auth.config.authorizedDomains || !Array.isArray(auth.config.authorizedDomains)) {
         auth.config.authorizedDomains = [];
       }
       if (!auth.config.authorizedDomains.includes(window.location.hostname)) {
