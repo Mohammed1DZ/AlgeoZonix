@@ -1,7 +1,7 @@
 'use server';
 
 import { firebaseConfig } from '@/firebase/config';
-import { initializeApp, getApps, getApp, type FirebaseApp, applicationDefault } from 'firebase-admin/app';
+import { initializeApp, getApps, getApp, type FirebaseApp, applicationDefault, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 
@@ -13,11 +13,27 @@ import { getFirestore } from 'firebase-admin/firestore';
  */
 export async function initializeFirebase() {
   if (getApps().length === 0) {
+    let credential;
+
+    // Try to use service account from environment variable first
+    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+      try {
+        const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+        credential = cert(serviceAccount);
+      } catch (error) {
+        console.warn('Failed to parse FIREBASE_SERVICE_ACCOUNT, falling back to applicationDefault');
+        credential = applicationDefault();
+      }
+    } else {
+      // Fallback to applicationDefault() for Google Cloud environments
+      credential = applicationDefault();
+    }
+
     // When running in a Google Cloud environment (like App Hosting),
     // applicationDefault() automatically finds the service account credentials.
     // We must also provide the projectId.
     initializeApp({ 
-      credential: applicationDefault(),
+      credential: credential,
       projectId: firebaseConfig.projectId,
     });
   }
