@@ -3,21 +3,20 @@
 import { initializeFirebase } from '@/firebase/server';
 import { getAuth } from 'firebase-admin/auth';
 import { collection, query, where, getDocs, deleteDoc, doc, writeBatch, Firestore } from 'firebase-admin/firestore';
-import { NextRequest, NextResponse } from 'next/server';
 
 /**
  * API Route to delete a user from Firebase Authentication and Firestore
  * POST /api/admin/delete-user
  * Body: { userId: string }
  */
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
     const { userId } = await request.json();
 
     if (!userId) {
-      return NextResponse.json(
-        { success: false, message: 'User ID is required.' },
-        { status: 400 }
+      return new Response(
+        JSON.stringify({ success: false, message: 'User ID is required.' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
@@ -43,15 +42,21 @@ export async function POST(request: NextRequest) {
     // 3. Clean up related data (orders, verifications, etc.)
     await deleteUserRelatedData(firestore, userId);
 
-    return NextResponse.json(
-      { success: true, message: `User ${userId} has been successfully deleted.` },
-      { status: 200 }
+    return new Response(
+      JSON.stringify({
+        success: true,
+        message: `User ${userId} has been successfully deleted.`,
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
     );
   } catch (error: any) {
     console.error('Failed to delete user:', error);
-    return NextResponse.json(
-      { success: false, message: error.message || 'An unknown error occurred during user deletion.' },
-      { status: 500 }
+    return new Response(
+      JSON.stringify({
+        success: false,
+        message: error.message || 'An unknown error occurred during user deletion.',
+      }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }
 }
@@ -68,8 +73,8 @@ async function deleteUserRelatedData(firestore: Firestore, userId: string): Prom
       const q = query(collection(firestore, collectionName), where('userId', '==', userId));
       const querySnapshot = await getDocs(q);
 
-      querySnapshot.docs.forEach((doc) => {
-        batch.delete(doc.ref);
+      querySnapshot.docs.forEach((docSnapshot: any) => {
+        batch.delete(docSnapshot.ref);
       });
 
       console.log(`Queued deletion of ${querySnapshot.size} ${collectionName} documents for user ${userId}`);

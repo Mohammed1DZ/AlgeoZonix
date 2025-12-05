@@ -2,16 +2,13 @@
 /**
  * @fileOverview A flow for securely deleting a user from the system.
  *
- * - deleteUser - Calls the API endpoint to delete a user from Firebase Authentication and Firestore.
+ * - deleteUser - Calls the server action to delete a user from Firebase Authentication and Firestore.
  * - DeleteUserInput - The input type for the deleteUser function.
  */
 
-import { z } from 'zod';
-
-const DeleteUserInputSchema = z.object({
-  userId: z.string().describe('The UID of the user to be deleted.'),
-});
-export type DeleteUserInput = z.infer<typeof DeleteUserInputSchema>;
+export interface DeleteUserInput {
+  userId: string;
+}
 
 export async function deleteUser(input: DeleteUserInput): Promise<{ success: boolean; message: string }> {
   const { userId } = input;
@@ -31,7 +28,7 @@ export async function deleteUser(input: DeleteUserInput): Promise<{ success: boo
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.message || 'Failed to delete user');
+      throw new Error(errorData.message || `Failed to delete user: ${response.statusText}`);
     }
 
     const data = await response.json();
