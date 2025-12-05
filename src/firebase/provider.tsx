@@ -73,6 +73,17 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
       setUserAuthState({ user: null, isUserLoading: false, userError: new Error("Auth service not provided.") });
       return;
     }
+    
+    // Explicitly authorize the current domain for auth operations to prevent "authorizedDomains not iterable" error.
+    if (typeof window !== 'undefined' && window.location.hostname) {
+      if (!auth.config.authorizedDomains) {
+        auth.config.authorizedDomains = [];
+      }
+      if (!auth.config.authorizedDomains.includes(window.location.hostname)) {
+        auth.config.authorizedDomains.push(window.location.hostname);
+      }
+    }
+
 
     setUserAuthState({ user: null, isUserLoading: true, userError: null }); // Reset on auth instance change
 
