@@ -74,4 +74,3 @@ export async function deleteUser(input: DeleteUserInput): Promise<{ success: boo
     };
   }
 }
-

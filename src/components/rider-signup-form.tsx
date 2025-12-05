@@ -8,11 +8,13 @@ import { User, Mail, KeyRound, Phone as PhoneIcon, Loader2 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast';
 import { useAuth, useFirestore } from '@/firebase';
 import { useRouter } from 'next/navigation';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { createUserWithEmailAndPassword, GoogleAuthProvider, getAdditionalUserInfo, signInWithPopup } from 'firebase/auth';
+import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { GoogleIcon } from './google-icon';
 
 export function RiderSignupForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -57,6 +59,7 @@ export function RiderSignupForm() {
         phone: formData.phone,
         role: 'driver',
         status: 'unverified',
+        createdAt: serverTimestamp(),
       });
 
       toast({
@@ -65,7 +68,6 @@ export function RiderSignupForm() {
       });
 
       // Redirect to the new rider dashboard to complete verification.
-      // We'll use a timeout to allow the user to see the toast.
       setTimeout(() => {
         router.push('/rider/dashboard');
       }, 1500);
@@ -88,44 +90,112 @@ export function RiderSignupForm() {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    if (!auth || !firestore) return;
+    setIsGoogleSubmitting(true);
+    const provider = new GoogleAuthProvider();
+    try {
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+      
+      const userDocRef = doc(firestore, "users", user.uid);
+      const userDoc = await getDoc(userDocRef);
+
+      if (userDoc.exists()) {
+        if(userDoc.data()?.role !== 'driver') {
+            toast({
+                variant: 'destructive',
+                title: 'Account Role Mismatch',
+                description: `This Google account is already registered as a ${userDoc.data()?.role}. Please use a different account.`
+            });
+            await auth.signOut(); // Sign out the user
+        } else {
+            toast({ title: "Login Successful", description: "Welcome back!" });
+        }
+      } else {
+        const [firstName, ...lastName] = user.displayName?.split(" ") || ["", ""];
+        await setDoc(userDocRef, {
+            profileInfo: {
+                firstName: firstName,
+                lastName: lastName.join(" "),
+                avatarUrl: user.photoURL
+            },
+            email: user.email,
+            role: 'driver',
+            status: 'unverified',
+            createdAt: serverTimestamp(),
+        });
+        toast({ title: "Rider Account Created", description: "Welcome! Please complete your verification." });
+      }
+
+      router.push('/rider/dashboard');
+
+    } catch (error: any) {
+      console.error("Google Rider Sign-up failed:", error);
+      toast({
+        variant: "destructive",
+        title: "Sign-Up Failed",
+        description: error.message || "Could not sign up with Google. Please try again.",
+      });
+    } finally {
+      setIsGoogleSubmitting(false);
+    }
+  }
+
   const canProceed = formData.name && formData.email && formData.password && formData.phone;
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-       <div className="space-y-4">
-           <div className="grid gap-2">
-            <Label htmlFor="name">Full Name</Label>
-            <div className="relative">
-              <User className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input id="name" name="name" value={formData.name} onChange={handleChange} placeholder="John Doe" required className="pl-8"/>
+    <div className="space-y-4">
+        <Button variant="outline" className="w-full" onClick={handleGoogleSignIn} disabled={isSubmitting || isGoogleSubmitting}>
+            {isGoogleSubmitting ? <Loader2 className="animate-spin mr-2"/> : <GoogleIcon className="mr-2 h-4 w-4" />}
+            Sign up with Google
+        </Button>
+         <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
             </div>
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="email">Email</Label>
-             <div className="relative">
-              <Mail className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input id="email" name="email" type="email" value={formData.email} onChange={handleChange} placeholder="m@example.com" required className="pl-8"/>
+            <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">
+                Or continue with email
+                </span>
             </div>
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="password">Password</Label>
-            <div className="relative">
-              <KeyRound className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input id="password" name="password" type="password" value={formData.password} onChange={handleChange} required className="pl-8"/>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="space-y-4">
+            <div className="grid gap-2">
+                <Label htmlFor="name">Full Name</Label>
+                <div className="relative">
+                <User className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input id="name" name="name" value={formData.name} onChange={handleChange} placeholder="John Doe" required className="pl-8"/>
+                </div>
             </div>
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="phone">Phone Number</Label>
-            <div className="relative">
-              <PhoneIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input id="phone" name="phone" type="tel" value={formData.phone} onChange={handleChange} placeholder="+1 234 567 890" required className="pl-8"/>
+            <div className="grid gap-2">
+                <Label htmlFor="email">Email</Label>
+                <div className="relative">
+                <Mail className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input id="email" name="email" type="email" value={formData.email} onChange={handleChange} placeholder="m@example.com" required className="pl-8"/>
+                </div>
             </div>
-          </div>
-      </div>
-      
-      <Button type="submit" disabled={!canProceed || isSubmitting} className="w-full">
-        {isSubmitting ? <Loader2 className="animate-spin" /> : 'Create Account & Continue'}
-      </Button>
-    </form>
+            <div className="grid gap-2">
+                <Label htmlFor="password">Password</Label>
+                <div className="relative">
+                <KeyRound className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input id="password" name="password" type="password" value={formData.password} onChange={handleChange} required className="pl-8"/>
+                </div>
+            </div>
+            <div className="grid gap-2">
+                <Label htmlFor="phone">Phone Number</Label>
+                <div className="relative">
+                <PhoneIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input id="phone" name="phone" type="tel" value={formData.phone} onChange={handleChange} placeholder="+1 234 567 890" required className="pl-8"/>
+                </div>
+            </div>
+        </div>
+        
+        <Button type="submit" disabled={!canProceed || isSubmitting || isGoogleSubmitting} className="w-full">
+            {isSubmitting ? <Loader2 className="animate-spin" /> : 'Create Account & Continue'}
+        </Button>
+        </form>
+    </div>
   );
 }

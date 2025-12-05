@@ -9,9 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Phone } from "lucide-react";
 import { useAuth, useFirestore } from "@/firebase";
-import { signInWithEmailAndPassword } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, getAdditionalUserInfo } from "firebase/auth";
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
+import { GoogleIcon } from "@/components/google-icon";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -22,6 +23,21 @@ export default function LoginPage() {
   const firestore = useFirestore();
   const router = useRouter();
   const { toast } = useToast();
+
+  const handleRedirectBasedOnRole = (role: string) => {
+    switch (role) {
+      case 'admin':
+        router.push('/admin/dashboard');
+        break;
+      case 'driver':
+        router.push('/rider/dashboard');
+        break;
+      case 'client':
+      default:
+        router.push('/dashboard');
+        break;
+    }
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,19 +71,7 @@ export default function LoginPage() {
         description: "Redirecting to your dashboard...",
       });
 
-      // Redirect based on the role fetched from Firestore
-      switch (role) {
-        case 'admin':
-          router.push('/admin/dashboard');
-          break;
-        case 'driver':
-          router.push('/rider/dashboard');
-          break;
-        case 'client':
-        default:
-          router.push('/dashboard');
-          break;
-      }
+      handleRedirectBasedOnRole(role);
 
     } catch (error: any) {
       console.error("Login failed:", error);
@@ -88,6 +92,65 @@ export default function LoginPage() {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    if (!auth || !firestore) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Firebase is not ready. Please try again.",
+      });
+      return;
+    }
+    setIsSubmitting(true);
+    const provider = new GoogleAuthProvider();
+    try {
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+      const additionalInfo = getAdditionalUserInfo(result);
+      
+      const userDocRef = doc(firestore, "users", user.uid);
+      const userDoc = await getDoc(userDocRef);
+      let role = 'client';
+
+      if (userDoc.exists()) {
+        role = userDoc.data()?.role || 'client';
+        toast({
+          title: "Login Successful",
+          description: "Welcome back!",
+        });
+      } else {
+        // Create a new user document for new Google sign-in
+        const [firstName, ...lastName] = user.displayName?.split(" ") || ["", ""];
+        await setDoc(userDocRef, {
+            profileInfo: {
+                firstName: firstName,
+                lastName: lastName.join(" "),
+                avatarUrl: user.photoURL
+            },
+            email: user.email,
+            role: 'client', // Default role
+            status: 'verified', // Google users are considered verified
+            createdAt: serverTimestamp(),
+        });
+        toast({
+            title: "Account Created",
+            description: "Welcome to AlgeoZonix!",
+        });
+      }
+      handleRedirectBasedOnRole(role);
+
+    } catch (error: any) {
+      console.error("Google Sign-In failed:", error);
+      toast({
+        variant: "destructive",
+        title: "Sign-In Failed",
+        description: error.message || "Could not sign in with Google. Please try again.",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   return (
     <Card className="mx-auto max-w-sm w-full">
       <CardHeader>
@@ -97,44 +160,60 @@ export default function LoginPage() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleLogin} className="grid gap-4">
-          <div className="grid gap-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="m@example.com"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              disabled={isSubmitting}
-            />
-          </div>
-          <div className="grid gap-2">
-            <div className="flex items-center">
-              <Label htmlFor="password">Password</Label>
-              <Link href="#" className="ml-auto inline-block text-sm underline">
-                Forgot your password?
-              </Link>
+        <div className="grid gap-4">
+            <Button variant="outline" className="w-full" onClick={handleGoogleSignIn} disabled={isSubmitting}>
+                <GoogleIcon className="mr-2 h-4 w-4" />
+                Sign in with Google
+            </Button>
+            <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-background px-2 text-muted-foreground">
+                    Or continue with
+                    </span>
+                </div>
             </div>
-            <Input 
-              id="password" 
-              type="password" 
-              required 
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              disabled={isSubmitting}
-            />
-          </div>
-          <Button type="submit" className="w-full" disabled={isSubmitting}>
-            {isSubmitting && <Loader2 className="animate-spin mr-2" />}
-            Login
-          </Button>
-          <Button variant="outline" className="w-full" disabled={isSubmitting}>
-            <Phone className="mr-2 h-4 w-4" />
-            Login with Phone
-          </Button>
-        </form>
+            <form onSubmit={handleLogin} className="grid gap-4">
+            <div className="grid gap-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                id="email"
+                type="email"
+                placeholder="m@example.com"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={isSubmitting}
+                />
+            </div>
+            <div className="grid gap-2">
+                <div className="flex items-center">
+                <Label htmlFor="password">Password</Label>
+                <Link href="#" className="ml-auto inline-block text-sm underline">
+                    Forgot your password?
+                </Link>
+                </div>
+                <Input 
+                id="password" 
+                type="password" 
+                required 
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={isSubmitting}
+                />
+            </div>
+            <Button type="submit" className="w-full" disabled={isSubmitting}>
+                {isSubmitting && <Loader2 className="animate-spin mr-2" />}
+                Login
+            </Button>
+            <Button variant="outline" className="w-full" disabled={isSubmitting}>
+                <Phone className="mr-2 h-4 w-4" />
+                Login with Phone
+            </Button>
+            </form>
+        </div>
         <div className="mt-4 text-center text-sm">
           Don&apos;t have an account?{" "}
           <Link href="/signup" className="underline">

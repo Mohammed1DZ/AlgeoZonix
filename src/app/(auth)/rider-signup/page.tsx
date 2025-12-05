@@ -8,7 +8,7 @@ export default function RiderSignupPage() {
       <CardHeader>
         <CardTitle className="text-2xl font-headline">Become a Rider for AlgeoZonix</CardTitle>
         <CardDescription>
-          Step 1: Create your account. You can complete the document verification on the next page.
+          Sign up with Google or create an account with your email.
         </CardDescription>
       </CardHeader>
       <CardContent>

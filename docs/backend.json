@@ -9,7 +9,7 @@
         "phone": { "type": "string" },
         "role": { "type": "string", "enum": ["admin", "client", "driver", "customer"] },
         "kycLevel": { "type": "number", "description": "Know Your Customer verification level." },
-        "status": { "type": "string", "enum": ["unverified", "pending", "verified", "suspended"] },
+        "status": { "type": "string", "enum": ["unverified", "pending", "verified"] },
         "profileInfo": {
           "type": "object",
           "properties": {
@@ -119,7 +119,7 @@
     }
   },
   "auth": {
-    "providers": ["password", "phone"]
+    "providers": ["password", "phone", "google"]
   },
   "firestore": {
     "structure": [
