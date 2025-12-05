@@ -1,156 +1,161 @@
 {
   "entities": {
-    "User": {
-      "title": "User",
-      "description": "Represents a user of the application, including their role and verification status.",
+    "Order": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Order",
       "type": "object",
+      "description": "Represents an order placed by a client.",
       "properties": {
-        "email": { "type": "string", "format": "email" },
-        "phone": { "type": "string" },
-        "role": { "type": "string", "enum": ["admin", "client", "driver", "customer"] },
-        "kycLevel": { "type": "number", "description": "Know Your Customer verification level." },
-        "status": { "type": "string", "enum": ["unverified", "pending", "verified"] },
-        "profileInfo": {
-          "type": "object",
-          "properties": {
-            "firstName": { "type": "string" },
-            "lastName": { "type": "string" },
-            "dob": { "type": "string", "format": "date" },
-            "avatarUrl": { "type": "string", "format": "uri", "description": "URL for the user's profile picture." }
-          }
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the order."
+        },
+        "clientId": {
+          "type": "string",
+          "description": "Reference to the Client who placed the order. (Relationship: Client 1:N Order)"
+        },
+        "submissionDate": {
+          "type": "string",
+          "description": "Date and time the order was submitted.",
+          "format": "date-time"
+        },
+        "status": {
+          "type": "string",
+          "description": "Current status of the order (e.g., 'Submitted', 'Processing', 'Shipped', 'Delivered')."
+        },
+        "details": {
+          "type": "string",
+          "description": "Detailed information about the order items, quantities, etc."
         }
       },
-      "required": ["email", "role", "status"]
+      "required": [
+        "id",
+        "clientId",
+        "submissionDate",
+        "status",
+        "details"
+      ]
     },
-    "DriverDocuments": {
-      "title": "DriverDocuments",
-      "description": "Stores documents and OCR data for a driver's verification.",
+    "Client": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Client",
       "type": "object",
+      "description": "Represents a client user of the application.",
       "properties": {
-        "license": { "$ref": "#/entities/DocumentVerification" },
-        "registrationCard": { "$ref": "#/entities/DocumentVerification" },
-        "platePhoto": { "$ref": "#/entities/ImageVerification" },
-        "insurance": { "$ref": "#/entities/DocumentVerification", "description": "Optional insurance document." }
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the client."
+        },
+        "name": {
+          "type": "string",
+          "description": "Full name of the client."
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address of the client.",
+          "format": "email"
+        },
+        "phone": {
+          "type": "string",
+          "description": "Phone number of the client."
+        },
+        "address": {
+          "type": "string",
+          "description": "Address of the client."
+        }
       },
-      "required": ["license", "registrationCard", "platePhoto"]
+      "required": [
+        "id",
+        "name",
+        "email",
+        "phone",
+        "address"
+      ]
     },
-    "Biometrics": {
-      "title": "Biometrics",
-      "description": "Stores results from facial verification.",
+    "Admin": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Admin",
       "type": "object",
+      "description": "Represents an admin user of the application.",
       "properties": {
-        "livenessScore": { "type": "number" },
-        "faceMatchScore": { "type": "number" },
-        "spoofFlags": { "type": "array", "items": { "type": "string" } }
-      }
-    },
-    "KycSession": {
-      "title": "KycSession",
-      "description": "Tracks the state and outcome of a single driver verification session.",
-      "type": "object",
-      "properties": {
-        "status": { "type": "string", "enum": ["pending", "under_review", "approved", "rejected"] },
-        "currentStep": { "type": "string" },
-        "decision": { "type": "string", "description": "Reason for approval or rejection." },
-        "reviewerId": { "type": "string", "description": "Admin who reviewed the session." },
-        "createdAt": { "type": "string", "format": "date-time" },
-        "updatedAt": { "type": "string", "format": "date-time" }
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the admin."
+        },
+        "name": {
+          "type": "string",
+          "description": "Full name of the admin."
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address of the admin.",
+          "format": "email"
+        }
       },
-      "required": ["status", "currentStep", "createdAt", "updatedAt"]
-    },
-    "RiskFlag": {
-      "title": "RiskFlag",
-      "description": "Represents a potential risk identified during verification.",
-      "type": "object",
-      "properties": {
-        "type": { "type": "string", "enum": ["low_image_quality", "data_mismatch", "possible_spoof"] },
-        "severity": { "type": "string", "enum": ["low", "medium", "high"] },
-        "createdAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["type", "severity", "createdAt"]
-    },
-    "AuditLog": {
-      "title": "AuditLog",
-      "description": "Logs significant actions taken within the system for auditing.",
-      "type": "object",
-      "properties": {
-        "actorId": { "type": "string" },
-        "action": { "type": "string" },
-        "targetId": { "type": "string" },
-        "changes": { "type": "object" },
-        "timestamp": { "type": "string", "format": "date-time" }
-      },
-      "required": ["actorId", "action", "timestamp"]
-    },
-    "DocumentVerification": {
-      "title": "DocumentVerification",
-      "description": "Holds images, OCR data, and validation status for a document.",
-      "type": "object",
-      "properties": {
-        "frontImageUrl": { "type": "string", "format": "uri" },
-        "backImageUrl": { "type": "string", "format": "uri" },
-        "ocrData": { "type": "object" },
-        "isValid": { "type": "boolean" },
-        "validationErrors": { "type": "array", "items": { "type": "string" } }
-      }
-    },
-    "ImageVerification": {
-      "title": "ImageVerification",
-      "description": "Holds an image and its validation status.",
-      "type": "object",
-      "properties": {
-        "imageUrl": { "type": "string", "format": "uri" },
-        "isValid": { "type": "boolean" },
-        "validationErrors": { "type": "array", "items": { "type": "string" } }
-      }
-    },
-    "Notification": {
-      "title": "Notification",
-      "description": "Represents a notification for a user.",
-      "type": "object",
-      "properties": {
-        "userId": { "type": "string", "description": "The ID of the user this notification is for." },
-        "message": { "type": "string" },
-        "isRead": { "type": "boolean" },
-        "createdAt": { "type": "string", "format": "date-time" },
-        "link": { "type": "string", "format": "uri", "description": "Optional link to navigate to." }
-      },
-      "required": ["userId", "message", "isRead", "createdAt"]
+      "required": [
+        "id",
+        "name",
+        "email"
+      ]
     }
   },
   "auth": {
-    "providers": ["password", "phone", "google"]
+    "providers": [
+      "password",
+      "anonymous"
+    ]
   },
   "firestore": {
     "structure": [
       {
-        "path": "/users/{userId}",
-        "definition": { "schema": { "$ref": "#/entities/User" }, "description": "Stores core user profile and role." }
+        "path": "/clients/{clientId}",
+        "definition": {
+          "entityName": "Client",
+          "schema": {
+            "$ref": "#/backend/entities/Client"
+          },
+          "description": "Stores client profiles. Uses path-based ownership for private client data.",
+          "params": [
+            {
+              "name": "clientId",
+              "description": "The unique identifier of the client."
+            }
+          ]
+        }
       },
       {
-        "path": "/users/{userId}/driverDocuments/{docId}",
-        "definition": { "schema": { "$ref": "#/entities/DriverDocuments" }, "description": "Stores sensitive driver documents, linked to a user." }
+        "path": "/orders/{orderId}",
+        "definition": {
+          "entityName": "Order",
+          "schema": {
+            "$ref": "#/backend/entities/Order"
+          },
+          "description": "Stores order information. Includes denormalized 'clientId' field for authorization independence. Allows clients to only access their own orders, and admins to access all orders.",
+          "params": [
+            {
+              "name": "orderId",
+              "description": "The unique identifier of the order."
+            }
+          ]
+        }
       },
       {
-        "path": "/users/{userId}/biometrics/{bioId}",
-        "definition": { "schema": { "$ref": "#/entities/Biometrics" }, "description": "Stores biometric verification results for a user." }
-      },
-       {
-        "path": "/users/{userId}/notifications/{notificationId}",
-        "definition": { "schema": { "$ref": "#/entities/Notification" }, "description": "Stores user-specific notifications." }
-      },
-      {
-        "path": "/kycSessions/{sessionId}",
-        "definition": { "schema": { "$ref": "#/entities/KycSession" }, "description": "Main collection for tracking verification sessions. Contains subcollections for associated data." }
-      },
-      {
-        "path": "/kycSessions/{sessionId}/riskFlags/{flagId}",
-        "definition": { "schema": { "$ref": "#/entities/RiskFlag" }, "description": "Flags raised during a specific KYC session." }
-      },
-      {
-        "path": "/auditLogs/{logId}",
-        "definition": { "schema": { "$ref": "#/entities/AuditLog" }, "description": "System-wide audit trail." }
+        "path": "/roles_admin/{adminId}",
+        "definition": {
+          "entityName": "Admin",
+          "schema": {
+            "$ref": "#/backend/entities/Admin"
+          },
+          "description": "Marks a user as an administrator. The existence of a document in this collection grants admin privileges.",
+          "params": [
+            {
+              "name": "adminId",
+              "description": "The unique identifier of the administrator."
+            }
+          ]
+        }
       }
-    ]
+    ],
+    "reasoning": "The Firestore data structure is designed to address the 'auth/operation-not-allowed' error, enforce role-based access control (RBAC), and support the application's core features securely and scalably. The structure prioritizes Authorization Independence, enabling simple, robust, and easily debuggable security rules.\n\n**Authorization Independence:**\nThe design eliminates the need for `get()` calls in security rules by denormalizing authorization data. For example, client information is copied into the `orders` collection to avoid needing to fetch the client document when evaluating order access.\n\n**Structural Segregation:**\nData with different access requirements are stored in separate collections. Client data and admin data are segregated.\n\n**Access Modeling:**\n*   Private Data: Path-based ownership is employed for client data (`/clients/{clientId}`).\n*   Collaborative Data: Not directly applicable, but the approach could be extended to support collaborative orders in the future via membership maps.\n*   Global Roles: Admin status is determined by the existence of a document in the `/roles_admin/{uid}` collection.\n\n**QAPs (Rules are not Filters):**\nThe structure supports secure `list` operations by ensuring that each collection has a homogeneous security posture. For example, listing orders is secure because the security rules can efficiently filter orders based on the authenticated user's role and the denormalized `clientId` field.\n\n**Addressing the 'auth/operation-not-allowed' Error:**\nThe error suggests an issue with Firebase Authentication configuration or security rules. The following structure will allow for explicit security rules that can be easily debugged.\n\n**Denormalization Strategy:**\nIn the `/orders` collection, the `clientId` field from the `Client` document is copied into each `Order` document. This denormalization allows security rules to validate that a client can only access their own orders without needing to perform a `get()` operation to retrieve the client's ID. Furthermore the admin role check relies on collection existence."
   }
 }
