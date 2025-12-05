@@ -1,0 +1,118 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+    
+    function getUserData(userId) {
+        return get(/databases/$(database)/documents/users/$(userId)).data;
+    }
+
+    function isAdmin() {
+      // An admin is a signed-in user whose role in their user document is 'admin'.
+      return isSignedIn() && getUserData(request.auth.uid).role == 'admin';
+    }
+
+    function isDriver() {
+      return isSignedIn() && getUserData(request.auth.uid).role == 'driver';
+    }
+    
+    // Allow server-side (Genkit flows) to write notifications
+    function isBackend() {
+        return request.auth == null;
+    }
+
+    // --- Rules for /users collection ---
+
+    // Admins can list all users.
+    match /users/{document=**} {
+        allow list: if isAdmin();
+    }
+
+    // Rules for a single user document.
+    match /users/{userId} {
+      // Admins can read/write any user document.
+      // Users can read their own document.
+      allow get: if isOwner(userId) || isAdmin();
+      // An authenticated user can create their OWN user document.
+      allow create: if isOwner(userId);
+      // Admins can update any user. Users can update their own.
+      allow update: if isOwner(userId) || isAdmin();
+      // Only admins can delete user documents.
+      allow delete: if isAdmin();
+
+      // /users/{userId}/driverDocuments/{docId}
+      // Only the owner can create/update. Only owner and admins can read.
+      match /driverDocuments/{docId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create, update: if isOwner(userId);
+        allow delete: if false; // Documents should be archived, not deleted.
+      }
+
+      // /users/{userId}/biometrics/{bioId}
+      // Highly sensitive. Only owner can create. Only admin can read for review.
+      match /biometrics/{bioId} {
+        allow read: if isAdmin();
+        allow create: if isOwner(userId);
+        allow update, delete: if false;
+      }
+      
+      // /users/{userId}/notifications/{notificationId}
+      // Users can only read their own notifications.
+      // The backend can write (create) new notifications.
+      match /notifications/{notificationId} {
+        allow read: if isOwner(userId);
+        allow create: if isBackend(); // Allow server-side creation
+        allow update, delete: if false; // Immutable for clients
+      }
+    }
+    
+    // /kycSessions/{sessionId}
+    // Drivers can create their own session. Admins can manage all sessions.
+    match /kycSessions/{sessionId} {
+      allow get: if isDriver() || isAdmin();
+      allow list: if isAdmin();
+      // A user can only create a session for themselves.
+      allow create: if isDriver() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAdmin();
+
+      // /kycSessions/{sessionId}/riskFlags/{flagId}
+      // Only readable by admins. Created by backend functions.
+      match /riskFlags/{flagId} {
+        allow read, list: if isAdmin();
+        allow write: if false; // Written by backend only
+      }
+    }
+
+    // /auditLogs/{logId}
+    // Immutable. Only admins can read. Created by backend functions.
+    match /auditLogs/{logId} {
+      allow read, list: if isAdmin();
+      allow write: if false; // Written by backend only
+    }
+
+    // Legacy collections from previous setup
+    match /clients/{clientId} {
+      allow read, write: if false;
+      match /menuItems/{menuItemId} {
+        allow read, write: if false;
+      }
+      match /orders/{orderId} {
+        allow read, write: if false;
+        match /orderItems/{orderItemId} {
+          allow read, write: if false;
+        }
+      }
+    }
+    match /customers/{customerId} {
+      allow read, write: if false;
+    }
+  }
+}
